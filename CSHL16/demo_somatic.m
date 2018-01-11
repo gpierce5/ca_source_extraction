@@ -1,11 +1,13 @@
 clear;
 %% load file 
 
-addpath(genpath('../../ca_source_extraction'));
+%addpath(genpath('../../ca_source_extraction'));
              
-nam = 'demoMovie.tif';          % insert path to tiff stack here
+%nam = 'demoMovie.tif';          % insert path to tiff stack here
+fpath='/Users/Georgia/Documents/CSHL2016/Project-ZebrafishRCaMP-ReaCHR/untitled folder/';
+nam = [fpath 'F2-PhasorCap5-REG.tif'];
 sframe=1;						% user input: first frame to read (optional, default 1)
-num2read=2000;					% user input: how many frames to read   (optional, default until the end)
+num2read=750;					% user input: how many frames to read   (optional, default until the end)
 
 Y = bigread2(nam,sframe,num2read);
 Y = Y - min(Y(:)); 
@@ -16,10 +18,10 @@ d = d1*d2;                                          % total number of pixels
 
 %% Set parameters
 
-K = 30;                                           % number of components to be found
-tau = 4;                                          % std of gaussian kernel (size of neuron) 
+K = 100;                                           % number of components to be found
+tau = 10;                                          % std of gaussian kernel (size of neuron) 
 p = 2;                                            % order of autoregressive system (p = 0 no dynamics, p=1 just decay, p = 2, both rise and decay)
-merge_thr = 0.8;                                  % merging threshold
+merge_thr = 0.9;                                  % merging threshold
 
 options = CNMFSetParms(...                      
     'd1',d1,'d2',d2,...                         % dimensions of datasets
