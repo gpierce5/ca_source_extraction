@@ -15,6 +15,8 @@ function [Ain, Cin, b_in, f_in, center, res] = greedyROI(Y, K, params, ROI_list)
 %            params.windowSiz: size of spatial window when computing the median (default 32 x 32)
 %            params.chunkSiz: number of timesteps to be processed simultaneously if on save_memory mode (default: 100)
 %            params.med_app: number of timesteps to be interleaved for fast (approximate) median calculation (default: 1, no approximation)
+%            params.rolling_sum: flag for using rolling sum to detect new components (default: True)
+%            params.rolling_length: length of rolling window (default: 100)
 % ROI_list   Kn x 2 (or 3) matrix with user specified centroids. If this are present, then the algorithm only finds components around these centroids
 
 %Output:
@@ -27,6 +29,7 @@ function [Ain, Cin, b_in, f_in, center, res] = greedyROI(Y, K, params, ROI_list)
 %
 % Author: Yuanjun Gao with modifications from Eftychios A. Pnevmatikakis and Weijian Yang
 
+use_sum = false;
 if nargin < 4 || isempty(ROI_list)
     user_ROIs = 0;
 else
@@ -83,14 +86,11 @@ else nIter = params.nIter; end
 if ~isfield(params, 'save_memory'), save_memory = 0;
 else save_memory = params.save_memory; end
     
-if ~isfield(params, 'chunkSiz'), chunkSiz = 100;
-else chunkSiz = params.chunkSiz; end
+if ~isfield(params, 'chunkSiz'), chunkSiz = 100; else chunkSiz = params.chunkSiz; end
+if ~isfield(params, 'windowSiz'), windowSiz = 32; else windowSiz = params.windowSiz; end
+if ~isfield(params, 'med_app'), med_app = 1; else med_app = params.med_app; end
 
-if ~isfield(params, 'windowSiz'), windowSiz = 32;
-else windowSiz = params.windowSiz; end
-
-if ~isfield(params, 'med_app'), med_app = 1;
-else med_app = params.med_app; end
+if ~isfield(params,'rem_prct') || isempty(params.rem_prct); params.rem_prct = 20; end
 
 Tint = 1:med_app:T;
 % if save_memory
@@ -103,7 +103,9 @@ Tint = 1:med_app:T;
 %         end
 %     end 
 % else
-if dimY == 2; med = median(Y(:,:,Tint), 3); else med = median(Y(:,:,:,Tint), 4); end
+%if dimY == 2; med = median(Y(:,:,Tint), 3); else med = median(Y(:,:,:,Tint), 4); end
+if dimY == 2; med = prctile(Y(:,:,Tint),params.rem_prct, 3); else med = prctile(Y(:,:,:,Tint),params.rem_prct,4); end
+
 % end
 
 Y = bsxfun(@minus, Y, med);
@@ -138,8 +140,16 @@ for r = 1:length(K)
 
     %scan the whole image (only need to do this at the first iteration)
     rho = imblur(Y, gSig, gSiz, dimY, save_memory, chunkSiz); %covariance of data and basis
-    v = sum(rho.^2, dimY+1); %variance explained
-
+    
+    if ~params.rolling_sum
+        v = sum(rho.^2, dimY+1); %variance explained
+    else
+        % running maximum
+        avg_fil = ones(1,params.rolling_length)/params.rolling_length;
+        rho_s = filter(avg_fil,1,rho.^2,[],dimY+1);
+        v = max(rho_s,[],dimY+1);
+    end
+    
     for k = 1:K(r),    
         if user_ROIs
             iHat = ROI_list(k,:);
@@ -203,13 +213,21 @@ for r = 1:length(K)
             if dimY == 2
                 rhoTemp = rho(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2), :)  - rhoTemp;
                 rho(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2), :)  = rhoTemp;
-                %rhoTemp = rho(iMod(1):iMod(2), jMod(1):jMod(2), :) - rhoTemp;
-                %rho(iMod(1):iMod(2), jMod(1):jMod(2), :) = rhoTemp;
-                v(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2)) = sum(rhoTemp.^2, 3);
+                if ~params.rolling_sum
+                    v(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2)) = sum(rhoTemp.^2, 3);
+                else
+                    rho_filt = filter(avg_fil,1,rhoTemp.^2,[],3);
+                    v(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2)) = max(rho_filt,[],3);
+                end
             else
                 rhoTemp = rho(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2), iMod(3,1):iMod(3,2), :)  - rhoTemp;
                 rho(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2), iMod(3,1):iMod(3,2), :)  = rhoTemp;
-                v(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2), iMod(3,1):iMod(3,2)) = sum(rhoTemp.^2, 4);
+                if ~params.rolling_sum
+                    v(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2), iMod(3,1):iMod(3,2)) = sum(rhoTemp.^2, 4);
+                else
+                    rho_filt = filter(avg_fil,1,rhoTemp.^2,[],4);
+                    v(iMod(1,1):iMod(1,2), iMod(2,1):iMod(2,2), iMod(3,1):iMod(3,2)) = max(rho_filt,[],4);
+                end
             end
         end
     end
@@ -218,7 +236,18 @@ for r = 1:length(K)
     center(sum(K(1:r-1))+1:sum(K(1:r)),:) = centers;
 end
 res = reshape(Y,d,T) + repmat(med(:),1,T);
-[b_in,f_in] = nnmf(max(res,0),nb);
+
+%% clear data matrix from local memory (avoid out-of-memory? see greedyROI_corr.m)
+clear Y
+
+%[b_in,f_in] = nnmf(max(res,0),nb);
+%[b_in,f_in] = nnsvd(max(res,0),nb);
+f_in = [mean(res);rand(nb-1,T)];
+
+for nmfiter = 1:100
+    b_in = max((res*f_in')/(f_in*f_in'),0);    
+    f_in = max((b_in'*b_in)\(b_in'*res),0);
+end
 
 
 function [ain,cin] = finetune(data,cin,nIter)

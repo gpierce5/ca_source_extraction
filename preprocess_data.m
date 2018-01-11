@@ -1,12 +1,35 @@
 function [P,Y] = preprocess_data(Y,p,options)
-
-% data pre-processing for:
-% (i)   identifying and interpolating missing entries (assumed to have the
-%       value NaN). Interpolated entries are passed back to Y.
-% (ii)  identifying saturated pixels
-% (iii) estimating noise level for every pixel
-% (iv)  estimating global discrete time constants (if needed)
-% This function replaces arpfit, present in the previous versions of the code.
+% PREPROCESS_DATA - Preprocess data for CNMF analysis of image signals
+%
+%   [P_PARMS,Y] = PREPROCESS_DATA(Y, P_ORDER, OPTIONS)
+%  
+% Inputs:
+%    Y - the image data to be examined
+%    P_ORDER - The order of the autoregressive system
+%    OPTIONS - A structure of options (see help CNMFSetParms)
+%
+% Outputs:
+%    P_PARMS - A structure of parameters extracted from the pre-processed data
+%    P_PARMS has the following fields:
+%
+%       Fieldname:                       | Description
+%       --------------------------------------------------------------------------
+%       p                                |  P_ORDER as above
+%       mis_data                         |  Index locations of missing (NaN) values in Y
+%       mis_values                       |  Interpolated values at the missing index locations
+%       pixels                           |  Index values of pixels that are not saturated
+%       sn                               |  Noise power of each pixel
+%       g                                |  Autoregressive model parameters
+%       
+%    Y - A processed version of the data Y with the following changes:
+%      (i)   identifying and interpolating missing entries (assumed to have the
+%            value NaN). Interpolated entries are passed back to Y.
+%      (ii)  identifying saturated pixels
+%      (iii) estimating noise level for every pixel
+%      (iv)  estimating global discrete time constants (if needed)
+%  
+% This function replaces ARPFIT, present in the previous versions of the code.
+%
 
 % Author: Eftychios A. Pnevmatikakis
 %           Simons Foundation, 2015
@@ -25,6 +48,9 @@ if ~isfield(options,'lags'); options.lags = defoptions.lags; end
 if ~isfield(options,'include_noise'); options.include_noise = defoptions.include_noise; end; include_noise = options.include_noise;
 if ~isfield(options,'split_data'); split_data = defoptions.split_data; else split_data = options.split_data; end
 if ~isfield(options,'cluster_pixels'); cluster_pixels = defoptions.cluster_pixels; else cluster_pixels = options.cluster_pixels; end
+if ~isfield(options,'extract_max'); extract_max = defoptions.extract_max; else extract_max = options.extract_max; end
+if ~isfield(options,'max_nlocs'); options.max_nlocs = defoptions.max_nlocs; end
+if ~isfield(options,'max_width'); options.max_width = defoptions.max_width; end
 
 %% interpolate missing data
 
@@ -85,6 +111,13 @@ if cluster_pixels
         P.W = W;
         P.H = H;
     end
+end
+
+%% extract maximum activity for each pixel
+if extract_max
+    [LOCS,Ym] = extract_max_activity(Y,options.max_nlocs,options.max_width);
+    P.max_locs = LOCS;
+    P.max_data = Ym;
 end
 %% estimate global time constants
 

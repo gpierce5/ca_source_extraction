@@ -20,8 +20,14 @@
         N = min(sizY(end),options.max_timesteps);
         if N < sizY(end)
            %Y = reshape(Y,prod(sizY(1:end-1)),[]);
-           Y(prod(sizY(1:end-1))*N+1:end) = [];
-           Y = reshape(Y,[sizY(1:end-1),N]);
+           switch ndims(Y), 
+               case 2,
+                    Y(:,N+1:end) = [];
+               case 3, 
+                    Y(:,:,N+1:end) = [];
+               case 4, 
+                    Y(:,:,:,N+1:end) = [];
+           end
         end
         
         Fs = 1;        
@@ -39,15 +45,17 @@
                     xdft = fft(Y((ind-1)*Nb+1:min(ind*Nb,d),:),[],2); 
                     xdft = xdft(:,1: floor(N/2)+1); % FN: floor added.
                     psdx = (1/(Fs*N)) * abs(xdft).^2;
-                    psdx(:,2:end-1) = 2*psdx(:,2:end-1);
+                    psdx(:,2:end-1) = 2*psdx(:,2:end-1) + eps;
                     %SN{ind} = mean_psd(psdx(:,indf),method);
-                    switch method
+                    switch lower(method)
                         case 'mean'
                             SN{ind}=sqrt(mean(psdx(:,indf)/2,2));
                         case 'median'
-                            SN{ind}=sqrt(median(psdx(:,indf)/2),2);
+                            SN{ind}=sqrt(median(psdx(:,indf)/2,2));
                         case 'logmexp'
                             SN{ind} = sqrt(exp(mean(log(psdx(:,indf)/2),2)));
+                        otherwise
+                            error('unknown method for averaging noise..')
                     end
                     PSDX{ind} = psdx;
                 end
@@ -58,15 +66,17 @@
                     xdft = fft(Yc{ind},[],2); 
                     xdft = xdft(:,1:floor(N/2)+1);
                     psdx = (1/(Fs*N)) * abs(xdft).^2;
-                    psdx(:,2:end-1) = 2*psdx(:,2:end-1);
+                    psdx(:,2:end-1) = 2*psdx(:,2:end-1) + eps;
                     Yc{ind} = [];
-                    switch method
+                    switch lower(method)
                         case 'mean'
                             SN{ind}=sqrt(mean(psdx(:,indf)/2,2));
                         case 'median'
-                            SN{ind}=sqrt(median(psdx(:,indf)/2),2);
+                            SN{ind}=sqrt(median(psdx(:,indf)/2,2));
                         case 'logmexp'
                             SN{ind} = sqrt(exp(mean(log(psdx(:,indf)/2),2)));
+                        otherwise
+                            error('unknown method for averaging noise..')
                     end
                     
                 end
@@ -76,14 +86,16 @@
             xdft = fft(Y);
             xdft = xdft(:,1:floor(N/2)+1);
             psdx = (1/(Fs*N)) * abs(xdft).^2;
-            psdx(:,2:end-1) = 2*psdx(:,2:end-1);
-            switch method
+            psdx(:,2:end-1) = 2*psdx(:,2:end-1) + eps;
+            switch lower(method)
                 case 'mean'
                     sn = sqrt(mean(psdx(:,indf)/2,2));
                 case 'median'
-                    sn = sqrt(median(psdx(:,indf)/2),2);
+                    sn = sqrt(median(psdx(:,indf)/2,2));
                 case 'logmexp'
                     sn = sqrt(exp(mean(log(psdx(:,indf)/2),2)));
+                otherwise
+                    error('unknown method for averaging noise..')
             end
         end
         psdx = cell2mat(PSDX);
